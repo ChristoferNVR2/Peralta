@@ -9,6 +9,9 @@ find_package(OpenGL REQUIRED)
 # Find GLUT
 find_package(GLUT REQUIRED)
 
+# Add include directory for stb_image.h (assuming it's in the 'include' folder)
+include_directories(${CMAKE_SOURCE_DIR}/include)
+
 # Add executable
 add_executable(Peralta main.cpp)
 
