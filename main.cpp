@@ -3,7 +3,8 @@
 
 // Variables to control the square's position and jumping state
 float posX = 0.0f;
-float posY = 0.0f;
+float posY = 5.0f;
+float lowerLimit = 5.0f;
 float jumpVelocity = 0.0f;
 bool isJumping = false;
 float gravity = -0.05f;
@@ -60,31 +61,46 @@ void resize(const int w, const int h) {
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glOrtho(-50, 50, -50, 50, -1, 1); // Define the orthographic projection
+    glOrtho(-50, 50, -5, 95, -1, 1); // Define the orthographic projection
 }
 
 // Function to handle keyboard input for movement and jumping
 void keyboardOperation(const unsigned char key, int x, int y) {
     switch (key) {
         case 32: // Start jumping when the space bar is pressed
-            if (!isJumping) { // Only allow jump if not already jumping
-                isJumping = true;
-                jumpVelocity = 1.0f; // Initial upward velocity
-            }
+            // if (!isJumping) { // Only allow jump if not already jumping
+            //     isJumping = true;
+            //     jumpVelocity = 1.0f; // Initial upward velocity
+            // }
+            isJumping = true;
+            jumpVelocity = 1.0f; // Initial upward velocity
+            glutPostRedisplay();
             break;
-        case 'a': posX -= 1.0f; // Move left
-                  break;
-        case 'd': posX += 1.0f; // Move right
-                  break;
-        case 'w': posY += 1.0f; // Move up
-                  break;
-        case 's': posY -= 1.0f; // Move down
-                  break;
+        case 'a':
+            posX -= 1.0f; // Move left
+            glutPostRedisplay();
+            break;
+        case 'd':
+            posX += 1.0f; // Move right
+            glutPostRedisplay();
+            break;
+        case 'w':
+            posY += 1.0f; // Move up
+            glutPostRedisplay();
+            break;
+        case 's':
+            if (posY <= lowerLimit) {
+                break;
+            }
+            posY -= 1.0f; // Move down
+            glutPostRedisplay();
+            break;
         default:
             break;
     }
 
-    glutPostRedisplay(); // Request a redraw after movement
+    // Avoid calling redisplay for any pressed key
+    // glutPostRedisplay();  // Request a redraw after movement
 }
 
 void updateJump(int value) {
@@ -96,8 +112,8 @@ void updateJump(int value) {
         rotationAngle += 5.0f;
 
         // Check if the square has landed (at y = 0)
-        if (posY <= 0.0f) {
-            posY = 0.0f;      // Set square to ground level
+        if (posY <= lowerLimit) {
+            posY = lowerLimit;      // Set square to ground level
             isJumping = false; // Stop jumping
             jumpVelocity = 0.0f;
             rotationAngle = 0.0f; // Reset rotation
@@ -113,7 +129,7 @@ int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB);
     glutInitWindowSize(600, 400);
-    glutInitWindowPosition(100, 200);
+    // glutInitWindowPosition(100, 200);
     glutCreateWindow("Geometry Dash Jump");
 
     init();
@@ -123,6 +139,7 @@ int main(int argc, char** argv) {
     glutKeyboardFunc(keyboardOperation); // Keyboard input callback
 
     // Start the jump update timer
+    // This function will be called only one time to start the jump
     glutTimerFunc(16, updateJump, 0); // Call updateJump every 16ms (60 FPS)
 
     glutMainLoop();
