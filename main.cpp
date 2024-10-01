@@ -16,6 +16,15 @@ float gravity = -0.05f;
 float rotationAngle = 0.0f; // Rotation angle during jump
 bool keys[256] = { false };
 
+// Variables to control the rebounding of the square
+float reboundVelocity = 0.0f;       // Initial rebound velocity
+float reboundFactor = 0.5f;         // Rebound decay factor
+int maxReboundCount = 3;            // Max number of rebounds
+int currentRebound = 0;             // Current number of rebounds
+bool isRebounding = false;          // Flag to track if we are in the rebound state
+float initialJumpVelocity = 1.0f;   // Initial jump velocity
+
+
 // Variables to store the texture ID and dimensions of the image
 GLuint textureID;
 GLuint characterTextureID;
@@ -251,8 +260,8 @@ void handleMovement() {
 
 void updateJump(int value) {
     if (isJumping) {
-        posY += jumpVelocity;   // Apply the current vertical velocity
-        jumpVelocity += gravity; // Apply gravity (downward force)
+        posY += jumpVelocity;       // Apply the current vertical velocity
+        jumpVelocity += gravity;    // Apply gravity (downward force)
 
         // Check if 'd' is pressed for clockwise rotation
         if (keys['d']) {
@@ -261,20 +270,49 @@ void updateJump(int value) {
             rotationAngle += 5.0f; // Counterclockwise rotation (positive angle)
         }
 
-        // Check if the square has landed (at y = 0)
+        // Check if the square has landed (at the lower limit)
         if (posY <= lowerLimit) {
             posY = lowerLimit;      // Set square to ground level
-            isJumping = false; // Stop jumping
-            jumpVelocity = 0.0f;
-            rotationAngle = 0.0f; // Reset rotation
+            isJumping = false;      // Stop jumping
+            jumpVelocity = 0.0f;    // Reset jump velocity
+            rotationAngle = 0.0f;   // Reset rotation
 
-            // Toggle upside-down state only if space was pressed with 'a' or 'd'
+            // Toggle upside-down state if 'a' or 'd' was pressed
             if (shouldToggleOrientation) {
                 isUpsideDown = !isUpsideDown;
             }
 
+            // Trigger the rebound when no directional keys are pressed
+            // if (!keys['a'] && !keys['d']) {
+            if (!keys['a'] && !keys['d']) {
+                reboundVelocity = initialJumpVelocity * reboundFactor; // Initial rebound velocity is smaller than the initial jump
+                isRebounding = true;    // Start the rebound
+                currentRebound = 0;     // Reset the rebound count
+            }
+
             // Reset toggle control
             shouldToggleOrientation = false;
+        }
+    }
+
+    // Handle rebound after vertical jump (when not moving horizontally)
+    if (isRebounding) {
+        posY += reboundVelocity;      // Apply the rebound velocity
+        reboundVelocity += gravity;   // Apply gravity to the rebound
+
+        // Check if the square hits the ground during rebound
+        if (posY <= lowerLimit) {
+            posY = lowerLimit;         // Set square to ground level
+            reboundVelocity *= -reboundFactor;  // Reverse velocity and reduce it (decay)
+
+            currentRebound++;  // Count this as one bounce
+
+            // Stop rebounding after 3 rebounds
+            if (currentRebound >= maxReboundCount) {
+                reboundVelocity = 0.0f; // Stop the bouncing effect
+                isRebounding = false;   // End the rebound phase
+                posY = lowerLimit;      // Ensure the square stays at the ground level
+            }
         }
     }
 
