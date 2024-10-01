@@ -10,12 +10,15 @@ float posY = 5.0f;
 float lowerLimit = 5.0f;
 float jumpVelocity = 0.0f;
 bool isJumping = false;
+bool isUpsideDown = false;  // Track whether the square is upside down
+bool shouldToggleOrientation = false; // Track whether to toggle orientation
 float gravity = -0.05f;
 float rotationAngle = 0.0f; // Rotation angle during jump
 bool keys[256] = { false };
 
 // Variables to store the texture ID and dimensions of the image
 GLuint textureID;
+GLuint characterTextureID;
 int imageWidth, imageHeight, nrChannels;
 
 // Function to load the texture using stb_image
@@ -35,8 +38,11 @@ bool loadTexture(const char* filePath) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
+        // Determine the format (RGB or RGBA) based on the number of channels
+        const GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
+
         // Upload the texture to OpenGL
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, imageWidth, imageHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, imageWidth, imageHeight, 0, format, GL_UNSIGNED_BYTE, data); // NOLINT(*-narrowing-conversions)
 
         // Free the loaded image data
         stbi_image_free(data);
@@ -48,6 +54,39 @@ bool loadTexture(const char* filePath) {
     }
 }
 
+bool loadCharacterTexture(const char* filePath) {
+    // Flip the image vertically to match OpenGL coordinate system
+    stbi_set_flip_vertically_on_load(true);
+
+    // Load the character image
+    if (unsigned char* data = stbi_load(filePath, &imageWidth, &imageHeight, &nrChannels, 0)) {
+        // Generate a texture ID
+        glGenTextures(1, &characterTextureID);
+        glBindTexture(GL_TEXTURE_2D, characterTextureID);
+
+        // Set texture parameters
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        // Determine the format (RGB or RGBA) based on the number of channels
+        const GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
+
+        // Upload the texture to OpenGL
+        glTexImage2D(GL_TEXTURE_2D, 0, format, imageWidth, imageHeight, 0, format, GL_UNSIGNED_BYTE, data); // NOLINT(*-narrowing-conversions)
+
+        // Free the loaded image data
+        stbi_image_free(data);
+
+        return true;
+    } else {
+        std::cerr << "Failed to load character texture!" << std::endl;
+        return false;
+    }
+}
+
+
 void init() {
     glClearColor(0.8, 0.8, 0.8, 0.0); // Background color
 
@@ -57,6 +96,12 @@ void init() {
     // Load the background texture
     if (!loadTexture("src/8836407.jpg")) { // Replace with your image path
         std::cerr << "Failed to load background image!" << std::endl;
+        exit(1);
+    }
+
+    // Load the character texture
+    if (!loadCharacterTexture("src/cube.png")) { // Replace with your image path
+        std::cerr << "Failed to load character texture!" << std::endl;
         exit(1);
     }
 }
@@ -74,12 +119,27 @@ void graphingAxes() {
 
 // Function to draw a square at the given position
 void graphingCharacter(const float x, const float y) {
-    glColor3f(0.0078f, 0.4078f, 0.4510f); // Blue color for the square
+    glColor3f(1.0f, 1.0f, 1.0f);
+    // glColor3f(0.0078f, 0.4078f, 0.4510f); // Blue color for the square
+
+    // Blind the character texture
+    glBindTexture(GL_TEXTURE_2D, characterTextureID);
+
+    // Draw the square with the texture applied
     glBegin(GL_QUADS);
-        glVertex2f(x - 5, y - 5); // Bottom-left corner
-        glVertex2f(x + 5, y - 5); // Bottom-right corner
-        glVertex2f(x + 5, y + 5); // Top-right corner
-        glVertex2f(x - 5, y + 5); // Top-left corner
+    if (isUpsideDown) {
+        // Texture coordinates for upside-down image
+        glTexCoord2f(1.0f, 1.0f); glVertex2f(x - 5, y - 5); // Bottom-left corner
+        glTexCoord2f(0.0f, 1.0f); glVertex2f(x + 5, y - 5); // Bottom-right corner
+        glTexCoord2f(0.0f, 0.0f); glVertex2f(x + 5, y + 5); // Top-right corner
+        glTexCoord2f(1.0f, 0.0f); glVertex2f(x - 5, y + 5); // Top-left corner
+    } else {
+        // Normal texture coordinates
+        glTexCoord2f(0.0f, 0.0f); glVertex2f(x - 5, y - 5); // Bottom-left corner
+        glTexCoord2f(1.0f, 0.0f); glVertex2f(x + 5, y - 5); // Bottom-right corner
+        glTexCoord2f(1.0f, 1.0f); glVertex2f(x + 5, y + 5); // Top-right corner
+        glTexCoord2f(0.0f, 1.0f); glVertex2f(x - 5, y + 5); // Top-left corner
+    }
     glEnd();
 }
 
@@ -110,7 +170,8 @@ void graph() {
     // Draw the background image
     drawBackground();
 
-    graphingAxes(); // Draw the X and Y axes
+    // Currently disabled to avoid overlapping with the background
+    // graphingAxes(); // Draw the X and Y axes
 
     // Translate to the new position of the square and rotate if jumping
     glTranslatef(posX, posY, 0);
@@ -157,6 +218,11 @@ void keyDown(const unsigned char key, int x, int y) {
     if (key == 32 && !isJumping) {
         isJumping = true;
         jumpVelocity = 1.0f; // Initial upward velocity
+
+        // Check if 'a' or 'd' is pressed along with space to toggle orientation
+        if (keys['a'] || keys['d']) {
+            shouldToggleOrientation = true;
+        }
     }
 }
 
@@ -179,6 +245,7 @@ void handleMovement() {
         isJumping = false;
         jumpVelocity = 0.0f;
         rotationAngle = 0.0f;
+        isUpsideDown = false;  // Reset to face-up state
     }
 }
 
@@ -200,6 +267,14 @@ void updateJump(int value) {
             isJumping = false; // Stop jumping
             jumpVelocity = 0.0f;
             rotationAngle = 0.0f; // Reset rotation
+
+            // Toggle upside-down state only if space was pressed with 'a' or 'd'
+            if (shouldToggleOrientation) {
+                isUpsideDown = !isUpsideDown;
+            }
+
+            // Reset toggle control
+            shouldToggleOrientation = false;
         }
     }
 
@@ -216,7 +291,7 @@ int main(int argc, char** argv) {
     glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB);
     glutInitWindowSize(600, 400);
     // glutInitWindowPosition(100, 200);
-    glutCreateWindow("Geometry Dash Jump");
+    glutCreateWindow("Geometry Dash");
 
     init();
 
